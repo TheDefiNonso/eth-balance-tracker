@@ -1,0 +1,10 @@
+.env
+balances.db
+__pycache__/
+.venv/
+app/draft.py
+app/test.py
+info.txt
+uv.lock
+.python-version
+jobs/
