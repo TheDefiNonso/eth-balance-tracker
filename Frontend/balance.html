@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETH Tracker — Balance</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="page">
+        <header class="site-header">
+            <a href="/" class="site-logo">ETH Tracker</a>
+            <nav class="site-nav">
+                <a href="/">Dashboard</a>
+                <a href="/balance" class="active">Balance</a>
+            </nav>
+        </header>
+
+        <p class="page-title">Lookup</p>
+        <h1 class="page-heading">Check <span>Balance</span></h1>
+
+        <div class="search-bar">
+            <input type="text" id="addrInput" placeholder="0x..." maxlength="42" autocomplete="off" spellcheck="false">
+            <button id="searchBtn">Query</button>
+        </div>
+
+        <div id="resultArea"></div>
+    </div>
+
+    <script>
+        const addrInput = document.getElementById("addrInput");
+        const searchBtn = document.getElementById("searchBtn");
+        const resultArea = document.getElementById("resultArea");
+
+        function isValid(addr) {
+            return addr.startsWith("0x") && addr.length === 42;
+        }
+
+        function weiToEth(weiStr) {
+            return (Number(BigInt(weiStr)) / 1e18).toFixed(8);
+        }
+
+        function pushURL(address) {
+            const url = new URL(window.location);
+            url.searchParams.set("address", address);
+            window.history.pushState({}, "", url);
+        }
+
+        function showLoading() {
+            resultArea.innerHTML = `
+                <div class="balance-card">
+                    <div class="addr-label">Fetching balance...</div>
+                </div>
+            `;
+        }
+
+        function showError(msg) {
+            resultArea.innerHTML = `
+                <div class="balance-card" style="border-color: var(--red)">
+                    <div class="addr-label" style="color: var(--red)">${msg}</div>
+                </div>
+            `;
+        }
+
+        function showResult(data) {
+            const isNew = data.new_address;
+            resultArea.innerHTML = `
+                <div class="balance-card">
+                    <div class="addr-label">
+                        Address
+                        ${isNew ? '<span class="badge-new">New</span>' : ''}
+                    </div>
+                    <div class="addr-value">${data.address}</div>
+                    <div class="eth-amount">
+                        ${weiToEth(data.balance_wei)}<span>ETH</span>
+                    </div>
+                    <div class="wei-amount">${data.balance_wei} Wei</div>
+                    <div style="margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button
+                            onclick="window.location='/history/${data.address}'"
+                            style="font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em;
+                                   text-transform: uppercase; padding: 10px 20px; background: transparent;
+                                   color: var(--amber); border: 1px solid var(--border-bright); cursor: pointer;
+                                   transition: background 0.15s;"
+                            onmouseover="this.style.background='var(--amber-mid)'"
+                            onmouseout="this.style.background='transparent'"
+                        >
+                            View History →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function runQuery(address) {
+            if (!isValid(address)) {
+                showError("Invalid address — must start with 0x and be 42 characters.");
+                return;
+            }
+
+            pushURL(address);
+            showLoading();
+
+            try {
+                const res = await fetch(`/api/balance?address=${address}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Failed to fetch balance");
+                }
+                const data = await res.json();
+                showResult(data);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        searchBtn.addEventListener("click", () => runQuery(addrInput.value.trim()));
+        addrInput.addEventListener("keydown", e => {
+            if (e.key === "Enter") runQuery(addrInput.value.trim());
+        });
+
+        // Auto-run if address is in the URL
+        window.addEventListener("load", () => {
+            const params = new URLSearchParams(window.location.search);
+            const addr = params.get("address");
+            if (addr) {
+                addrInput.value = addr;
+                runQuery(addr);
+            }
+        });
+
+        window.addEventListener("popstate", () => {
+            const params = new URLSearchParams(window.location.search);
+            const addr = params.get("address");
+            if (addr) {
+                addrInput.value = addr;
+                runQuery(addr);
+            } else {
+                resultArea.innerHTML = "";
+                addrInput.value = "";
+            }
+        });
+    </script>
+</body>
+
+</html>

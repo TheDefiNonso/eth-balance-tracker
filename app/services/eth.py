@@ -13,13 +13,7 @@ logger.setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-async def fetch_eth_balance(address: str, retries: int = 3) -> float | None:
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "eth_getBalance",
-        "params": [address, "latest"],
-        "id": 1,
-    }
+async def _post_rpc(payload: dict, retries: int = 3) -> dict | None:
 
     timeout = httpx.Timeout(10.0)
 
@@ -29,27 +23,64 @@ async def fetch_eth_balance(address: str, retries: int = 3) -> float | None:
                 response = await client.post(ALCHEMY_URL, json=payload)
 
             response.raise_for_status()
-            data = response.json()
-
-            if "result" not in data:
-                logger.error(f"Invalid RPC response for {address}: {data}")
-                return None
-
-            wei_int = int(data["result"], 16)
-            return wei_int
+            return response.json()
 
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
-            logger.warning(
-                f"Attempt {attempt}/{retries} failed for {address}: {e}"
-            )
-
+            logger.warning(f"Attempt {attempt}/{retries} failed: {e}")
             if attempt < retries:
-                await asyncio.sleep(2 ** attempt)  # exponential backoff
+                await asyncio.sleep(2 ** attempt)
             else:
-                logger.error(f"All retries failed for {address}")
+                logger.error("All retries exhausted")
                 return None
 
         except Exception as e:
-            logger.exception(
-                f"Unexpected error fetching balance for {address}: {e}")
+            logger.exception(f"Unexpected RPC error: {e}")
             return None
+
+
+async def fetch_eth_balance(address: str) -> int | None:
+
+    data = await _post_rpc({
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1,
+    })
+
+    if data is None or "result" not in data:
+        logger.error(f"Invalid balance response for {address}: {data}")
+        return None
+
+    return int(data["result"], 16)
+
+
+async def fetch_balance_at_block(address: str, block: int) -> int | None:
+    data = await _post_rpc({
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, hex(block)],
+        "id": 1,
+    })
+
+    if data is None or "result" not in data:
+        logger.error(
+            f"Invalid balance response for {address} at block {block}: {data}")
+        return None
+
+    return int(data["result"], 16)
+
+
+async def fetch_latest_block() -> int | None:
+
+    data = await _post_rpc({
+        "jsonrpc": "2.0",
+        "method": "eth_blockNumber",
+        "params": [],
+        "id": 1,
+    })
+
+    if data is None or "result" not in data:
+        logger.error(f"Invalid blockNumber response: {data}")
+        return None
+
+    return int(data["result"], 16)

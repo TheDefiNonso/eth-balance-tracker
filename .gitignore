@@ -2,9 +2,12 @@
 balances.db
 __pycache__/
 .venv/
-app/draft.py
 app/test.py
 info.txt
 uv.lock
 .python-version
 jobs/
+*.pyc
+.DS_Store
+balances.db-shm
+balances.db-wal

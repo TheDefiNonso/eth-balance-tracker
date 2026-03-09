@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETH Tracker — Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="page">
+        <header class="site-header">
+            <a href="/" class="site-logo">ETH Tracker</a>
+            <nav class="site-nav">
+                <a href="/" class="active">Dashboard</a>
+                <a href="/balance">Balance</a>
+            </nav>
+        </header>
+
+        <p class="page-title">Overview</p>
+        <h1 class="page-heading">Tracked <span>Wallets</span></h1>
+
+        <div class="stats-bar">
+            <div class="stat-cell">
+                <div class="stat-label">Total Wallets</div>
+                <div class="stat-value" id="statTotal">—</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">This Page</div>
+                <div class="stat-value" id="statPage">—</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Poll Interval</div>
+                <div class="stat-value">5 MIN</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Last Loaded</div>
+                <div class="stat-value" id="statTime">—</div>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Address</th>
+                        <th>Balance (ETH)</th>
+                        <th>Balance (Wei)</th>
+                        <th>Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="wallettbody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button id="prevBtn" disabled>← Prev</button>
+            <span class="page-info" id="pageInfo">Page 1</span>
+            <button id="nextBtn" disabled>Next →</button>
+        </div>
+    </div>
+
+    <script>
+        const tbody = document.getElementById("wallettbody");
+        const prevBtn = document.getElementById("prevBtn");
+        const nextBtn = document.getElementById("nextBtn");
+        const pageInfo = document.getElementById("pageInfo");
+        const statTotal = document.getElementById("statTotal");
+        const statPage = document.getElementById("statPage");
+        const statTime = document.getElementById("statTime");
+
+        const LIMIT = 100;
+        let offset = 0;
+        let currentCount = 0;
+
+        function weiToEth(weiStr) {
+            return (Number(BigInt(weiStr)) / 1e18).toFixed(6);
+        }
+
+        function setLoading() {
+            tbody.innerHTML = `<tr class="state-row"><td colspan="5">Loading...</td></tr>`;
+        }
+
+        function setError(msg) {
+            tbody.innerHTML = `<tr class="state-row error"><td colspan="5">${msg}</td></tr>`;
+        }
+
+        async function loadWallets(newOffset) {
+            setLoading();
+
+            try {
+                const res = await fetch(`/api/wallets?offset=${newOffset}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Failed to load wallets");
+                }
+                const data = await res.json();
+
+                offset = newOffset;
+                currentCount = data.count;
+
+                tbody.innerHTML = "";
+
+                if (currentCount === 0) {
+                    tbody.innerHTML = `<tr class="state-row"><td colspan="5">No wallets tracked yet.</td></tr>`;
+                } else {
+                    data.results.forEach((row, i) => {
+                        const tr = document.createElement("tr");
+                        tr.style.animationDelay = `${i * 0.03}s`;
+                        tr.innerHTML = `
+                            <td class="block">${offset + i + 1}</td>
+                            <td class="addr" onclick="window.location='/history/${row.address}'">${row.address}</td>
+                            <td class="eth">${weiToEth(row.balance_wei)}</td>
+                            <td>${row.balance_wei}</td>
+                            <td class="ts">${row.last_updated}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                // Update stats
+                statPage.textContent = currentCount;
+                statTime.textContent = new Date().toLocaleTimeString();
+
+                // Update pagination
+                const page = offset / LIMIT + 1;
+                pageInfo.textContent = `Page ${page}`;
+                prevBtn.disabled = offset === 0;
+                nextBtn.disabled = currentCount < LIMIT;
+
+            } catch (err) {
+                setError(err.message);
+            }
+        }
+
+        prevBtn.addEventListener("click", () => {
+            if (offset >= LIMIT) loadWallets(offset - LIMIT);
+        });
+
+        nextBtn.addEventListener("click", () => {
+            loadWallets(offset + LIMIT);
+        });
+
+        // Initial load
+        loadWallets(0).then(() => {
+            // Rough total: if we got a full page, show X+ else show exact
+            statTotal.textContent = currentCount === LIMIT ? `${LIMIT}+` : String(currentCount);
+        });
+    </script>
+</body>
+
+</html>

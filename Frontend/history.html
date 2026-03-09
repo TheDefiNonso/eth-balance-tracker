@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETH Tracker — History</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="page">
+        <header class="site-header">
+            <a href="/" class="site-logo">ETH Tracker</a>
+            <nav class="site-nav">
+                <a href="/">Dashboard</a>
+                <a href="/balance">Balance</a>
+            </nav>
+        </header>
+
+        <p class="page-title">Transaction History</p>
+        <h1 class="page-heading">Block <span>Snapshots</span></h1>
+
+        <div class="address-header">
+            <div class="label">Address</div>
+            <div class="addr" id="addrDisplay">—</div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-cell">
+                <div class="stat-label">Records This Page</div>
+                <div class="stat-value" id="statCount">—</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Latest Block</div>
+                <div class="stat-value" id="statBlock">—</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Latest Balance</div>
+                <div class="stat-value" id="statBalance">—</div>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Block</th>
+                        <th>Balance (ETH)</th>
+                        <th>Balance (Wei)</th>
+                        <th>Recorded At</th>
+                    </tr>
+                </thead>
+                <tbody id="histbody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button id="prevBtn" disabled>← Prev</button>
+            <span class="page-info" id="pageInfo">Page 1</span>
+            <button id="nextBtn" disabled>Next →</button>
+        </div>
+    </div>
+
+    <script>
+        const histbody = document.getElementById("histbody");
+        const prevBtn = document.getElementById("prevBtn");
+        const nextBtn = document.getElementById("nextBtn");
+        const pageInfo = document.getElementById("pageInfo");
+        const addrDisplay = document.getElementById("addrDisplay");
+        const statCount = document.getElementById("statCount");
+        const statBlock = document.getElementById("statBlock");
+        const statBalance = document.getElementById("statBalance");
+
+        const LIMIT = 100;
+        let offset = 0;
+        let currentCount = 0;
+
+        // Pull the address from the URL path: /history/0x...
+        const address = window.location.pathname.split("/history/")[1] || "";
+
+        function weiToEth(weiStr) {
+            return (Number(BigInt(weiStr)) / 1e18).toFixed(6);
+        }
+
+        function setLoading() {
+            histbody.innerHTML = `<tr class="state-row"><td colspan="5">Loading...</td></tr>`;
+        }
+
+        function setError(msg) {
+            histbody.innerHTML = `<tr class="state-row error"><td colspan="5">${msg}</td></tr>`;
+        }
+
+        function updateURL(newOffset) {
+            const url = new URL(window.location);
+            if (newOffset === 0) {
+                url.searchParams.delete("offset");
+            } else {
+                url.searchParams.set("offset", newOffset);
+            }
+            window.history.pushState({}, "", url);
+        }
+
+        async function loadHistory(newOffset) {
+            setLoading();
+
+            try {
+                const res = await fetch(`/api/history/${address}?offset=${newOffset}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Failed to load history");
+                }
+                const data = await res.json();
+
+                offset = newOffset;
+                currentCount = data.count;
+
+                histbody.innerHTML = "";
+
+                if (currentCount === 0) {
+                    histbody.innerHTML = `<tr class="state-row"><td colspan="5">No history found for this address.</td></tr>`;
+                } else {
+                    data.results.forEach((row, i) => {
+                        const tr = document.createElement("tr");
+                        tr.style.animationDelay = `${i * 0.025}s`;
+                        tr.innerHTML = `
+                            <td class="block">${row.id}</td>
+                            <td class="block">${row.block_number.toLocaleString()}</td>
+                            <td class="eth">${weiToEth(row.balance_wei)}</td>
+                            <td>${row.balance_wei}</td>
+                            <td class="ts">${row.recorded_at}</td>
+                        `;
+                        histbody.appendChild(tr);
+                    });
+
+                    // Update stats from first row (most recent block)
+                    const first = data.results[0];
+                    statBlock.textContent = first.block_number.toLocaleString();
+                    statBalance.textContent = `${weiToEth(first.balance_wei)} ETH`;
+                }
+
+                statCount.textContent = currentCount;
+
+                const page = offset / LIMIT + 1;
+                pageInfo.textContent = `Page ${page}`;
+                prevBtn.disabled = offset === 0;
+                nextBtn.disabled = currentCount < LIMIT;
+
+                updateURL(newOffset);
+
+            } catch (err) {
+                setError(err.message);
+            }
+        }
+
+        prevBtn.addEventListener("click", () => {
+            if (offset >= LIMIT) loadHistory(offset - LIMIT);
+        });
+
+        nextBtn.addEventListener("click", () => {
+            loadHistory(offset + LIMIT);
+        });
+
+        window.addEventListener("popstate", () => {
+            const params = new URLSearchParams(window.location.search);
+            const off = parseInt(params.get("offset") || "0", 10);
+            loadHistory(off);
+        });
+
+        // Init
+        if (!address || !address.startsWith("0x") || address.length !== 42) {
+            addrDisplay.textContent = "Invalid address";
+            histbody.innerHTML = `<tr class="state-row error"><td colspan="5">No valid address in URL.</td></tr>`;
+        } else {
+            addrDisplay.textContent = address;
+            document.title = `ETH Tracker — ${address.slice(0, 10)}...`;
+
+            const params = new URLSearchParams(window.location.search);
+            const initialOffset = parseInt(params.get("offset") || "0", 10);
+            loadHistory(initialOffset);
+        }
+    </script>
+</body>
+
+</html>
