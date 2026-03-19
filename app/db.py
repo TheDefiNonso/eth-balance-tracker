@@ -1,6 +1,5 @@
 import sqlite3
 import logging
-from pathlib import Path
 from app.core.config import DB_PATH
 
 

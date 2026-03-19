@@ -66,11 +66,7 @@ async def poll_wallets_forever():
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    logger.info("DB initialized")
-
+async def seed_addresses():
     logger.info("Seeding watched addresses from config...")
     for address in WATCHED_ADDRESSES:
         try:
@@ -78,15 +74,24 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.exception(f"Failed to seed {address}: {e}")
 
-    task = asyncio.create_task(poll_wallets_forever())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    logger.info("DB initialized")
+
+    seed_task = asyncio.create_task(seed_addresses())
+    poll_task = asyncio.create_task(poll_wallets_forever())
 
     yield
 
-    task.cancel()
+    seed_task.cancel()
+    poll_task.cancel()
     logger.info("App shutdown")
 
 
 app = FastAPI(lifespan=lifespan)
+
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 
