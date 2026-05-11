@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: 0xtracker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ALCHEMY_URL
+        sync: false
+      - key: DB_PATH
+        value: /var/data/balances.db
+    disk:
+      name: sqlite-data
+      mountPath: /var/data
+      sizeGB: 1
